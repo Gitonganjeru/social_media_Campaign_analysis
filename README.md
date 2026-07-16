@@ -496,8 +496,8 @@ Aspiring Data Analyst skilled in:
 
 ### Connect With Me
 
-- LinkedIn: *(Add your LinkedIn URL)*
-- GitHub: *(Add your GitHub Repository URL)*
+- LinkedIn: *(www.linkedin.com/in/timothy-gitonga-aa680920a)*
+- GitHub: *(https://github.com/Gitonganjeru/social_media_Campaign_analysis/edit/main/README.md)*
 
 ---
 
