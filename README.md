@@ -189,6 +189,106 @@ Conducted database exploration to understand:
 - Data dictionary
 - Schema understanding
 
+-- I created a database, this is the data familiarization stage
+CREATE database social_media_campaign;
+USE social_media_campaign;
+
+-- This inspects the database to identify all available tables 
+SHOW TABLES;
+
+-- I want to now understand  the tables's structure before begining the analysis
+DESCRIBE ads;
+SELECT *
+FROM ads
+LIMIT 10;
+
+-- Now I will do the rest for campaigns and users
+DESCRIBE campaigns;
+SELECT *
+FROM campaigns
+LIMIT 1000;
+
+-- Explore user table
+DESCRIBE users;
+SELECT *
+FROM users
+LIMIT 10;
+
+-- Count total records
+SELECT COUNT(*) AS total_ads
+FROM ads;
+
+-- count total campaign records
+SELECT COUNT(*) AS total_campaign
+FROM campaigns;
+
+-- count total users
+SELECT COUNT(*) AS total_users
+FROM users;
+
+-- Explore the central transaction table (Fact Table) that records every user interaction with an advertisement.
+DESCRIBE ad_events;
+SELECT *
+FROM ad_events;
+
+-- Total events recorded
+SELECT COUNT(*) AS total_events
+FROM ad_events;
+ 
+-- different event types
+SELECT DISTINCT event_type
+FROM ad_events;
+
+-- How many events belong to each event type
+SELECT
+	event_type,
+	COUNT(*) AS total_events
+FROM ad_events
+GROUP BY event_type;
+
+-- the day of the week with most activity
+SELECT
+	day_of_week,
+    COUNT(*) AS total_events
+FROM ad_events
+GROUP BY day_of_week
+ORDER BY total_events DESC;
+
+-- the time of the day with the highest number of events
+SELECT 
+	time_of_day,
+    COUNT(*) AS total_events
+FROM ad_events
+GROUP BY time_of_day
+ORDER BY total_events DESC;
+
+-- the earliest timestamp
+SELECT MIN(timestamp) AS earliest_event
+FROM ad_events;
+
+-- the latest timestamp
+SELECT MAX(timestamp) AS latest_event
+FROM ad_events;
+
+-- duration of the campaign dataset
+SELECT
+    MIN(timestamp) AS first_event,
+    MAX(timestamp) AS last_event,
+    DATEDIFF(MAX(timestamp), MIN(timestamp)) AS campaign_days
+FROM ad_events;
+
+-- event distribution
+SELECT
+    event_type,
+    ROUND(
+        COUNT(*) * 100.0 /
+        (SELECT COUNT(*) FROM ad_events),
+        2
+    ) AS percentage
+FROM ad_events
+GROUP BY event_type
+ORDER BY percentage DESC;
+
 ---
 
 ## 3. Data Quality Assessment
@@ -197,20 +297,98 @@ Evaluated completeness, consistency, and validity before analysis.
 
 ### Data Quality Checks
 
-#### Missing Values
+-- checking for missing campaign budget values
+SELECT *
+FROM campaigns
+WHERE total_budget IS NULL;
 
-Validated critical fields such as:
+-- missing campaign names
+SELECT *
+FROM campaigns
+WHERE name IS NULL;
 
-- Campaign names
-- Campaign budgets
+-- duplicate campaigns using group by and having
+SELECT
+    campaign_id,
+    COUNT(*) AS occurrences
+FROM campaigns
+GROUP BY campaign_id
+HAVING COUNT(*) > 1;
 
-#### Duplicate Detection
+-- duplicate ads using group by and having
+SELECT
+    ad_id,
+    COUNT(*) AS occurrences
+FROM ads
+GROUP BY ad_id
+HAVING COUNT(*) > 1;
 
-Performed duplicate analysis using:
+-- duplicate users
+SELECT
+    user_id,
+    COUNT(*) AS occurrences
+FROM users
+GROUP BY user_id
+HAVING COUNT(*) > 1;
 
-```sql
-GROUP BY
-HAVING COUNT(*) > 1
+-- I investigated the duplicates found on users column
+SELECT *
+FROM users WHERE user_id= '7332b';
+
+-- Duplicate user_id values were identified.
+-- The associated records contain different demographic attributes,
+-- suggesting that they are not exact duplicate records.
+
+-- This may indicate:
+
+ -- Data entry inconsistencies
+-- User identifier reuse
+-- Synthetic data generation artifacts
+
+-- Without documented business rules confirming that user_id must be unique, the records have been retained pending stakeholder clarification.
+
+-- I will now proceed to do a referential intergrity check
+-- Do all ads belong to valid campaigns?
+SELECT
+    a.ad_id,
+    a.campaign_id
+FROM ads a
+LEFT JOIN campaigns c
+ON a.campaign_id = c.campaign_id
+WHERE c.campaign_id IS NULL;
+
+-- check event intergrity
+SELECT
+    ae.ad_id
+FROM ad_events ae
+LEFT JOIN ads a
+ON ae.ad_id = a.ad_id
+WHERE a.ad_id IS NULL;
+
+-- CHeck user intergrity
+SELECT
+    ae.user_id
+FROM ad_events ae
+LEFT JOIN users u
+ON ae.user_id = u.user_id
+WHERE u.user_id IS NULL;
+
+-- After intergrity check I will do data validation
+-- campaign budget
+SELECT *
+FROM campaigns
+WHERE total_budget <= 0;
+
+-- campaign duration
+SELECT *
+FROM campaigns
+WHERE duration_days <= 0;
+
+-- age validation
+SELECT *
+FROM users
+WHERE user_age NOT BETWEEN 18 AND 65;
+
 ```
 
 Investigated duplicate user IDs and documented findings before making decisions.
@@ -281,7 +459,185 @@ Performed exploratory analysis to understand event distributions and engagement 
 - MIN()
 - MAX()
 - DISTINCT
+-- 1. Which ad platform generated the highest engagement?
+USE social_media_campaign;
+SELECT
+    a.ad_platform,
 
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM ads AS a
+INNER JOIN ad_events AS ae
+    ON a.ad_id = ae.ad_id
+
+GROUP BY a.ad_platform
+
+ORDER BY total_engagements DESC;
+
+-- 2. Which ad formats (Video, Carousel, Stories, Image) generate the highest user engagement?
+SELECT
+    a.ad_type,
+
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM ads AS a
+INNER JOIN ad_events AS ae
+    ON a.ad_id = ae.ad_id
+
+GROUP BY a.ad_type
+
+ORDER BY total_engagements DESC;
+
+
+-- 3. which age group is most engaged?
+SELECT
+    u.age_group,
+
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM users AS u
+
+INNER JOIN ad_events AS ae
+    ON u.user_id = ae.user_id
+
+GROUP BY u.age_group
+
+ORDER BY total_engagements DESC;
+
+-- 4. which gender engages the most?
+SELECT
+    u.user_gender,
+
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM users AS u
+
+INNER JOIN ad_events AS ae
+    ON u.user_id = ae.user_id
+
+GROUP BY u.user_gender
+
+ORDER BY total_engagements DESC;
+
+-- 6. which country generates the highest user engagement?
+SELECT
+    u.country,
+
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM users AS u
+
+INNER JOIN ad_events AS ae
+    ON u.user_id = ae.user_id
+
+GROUP BY u.country
+
+ORDER BY total_engagements DESC;
+
+-- 7. which user intrest generates the highest ebgagement?
+SELECT
+    u.interests,
+
+    COUNT(CASE WHEN ae.event_type = 'Impression' THEN 1 END) AS impressions,
+
+    COUNT(CASE WHEN ae.event_type = 'Click' THEN 1 END) AS clicks,
+
+    COUNT(CASE WHEN ae.event_type = 'Like' THEN 1 END) AS likes,
+
+    COUNT(CASE WHEN ae.event_type = 'Share' THEN 1 END) AS shares,
+
+    COUNT(CASE WHEN ae.event_type = 'Purchase' THEN 1 END) AS purchases,
+
+    COUNT(
+        CASE
+            WHEN ae.event_type IN ('Click', 'Like', 'Share', 'Purchase')
+            THEN 1
+        END
+    ) AS total_engagements
+
+FROM users AS u
+
+INNER JOIN ad_events AS ae
+    ON u.user_id = ae.user_id
+
+GROUP BY u.interests
+
+ORDER BY total_engagements DESC;
 ---
 
 ## 5. Business Analysis
