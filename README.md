@@ -1,7 +1,4 @@
 📊 Social Media Campaign Performance Analysis
-![SQL](https://img.shields.io/badge/SQL-MySQL-blue)
-![Status](https://img.shields.io/badge/Status-In%20Progress-orange)
-![Methodology](https://img.shields.io/badge/Methodology-CRISP--DM-success)
 Executive Summary
 This repository showcases an end-to-end SQL analytics project analyzing synthetic Facebook and Instagram advertising campaign data. The project follows the CRISP-DM methodology, progressing from business understanding and database exploration to data quality assessment, exploratory business analysis, and KPI development.
 The objective is to demonstrate practical SQL skills while producing actionable business insights that support marketing decision-making.
